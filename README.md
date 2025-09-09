@@ -1,152 +1,225 @@
-# Wazuh + ModSecurity (ModSec) Integration — Step‑by‑Step Guide
+# Wazuh + ModSecurity (WAF) Integration for Apache
 
-> Complete README to publish in your GitHub repo. Includes background concepts (Apache, WAF, ModSecurity, Wazuh), **why this project is useful**, detailed setup steps, architecture diagram, and dashboard creation.
+## 📌 Project Overview
 
----
+This project demonstrates the integration of **Apache + ModSecurity (WAF)** with **Wazuh (SIEM)**. The goal is to capture ModSecurity audit logs from an Apache web server and forward them to the Wazuh Manager via the Wazuh Agent. The logs are then analyzed, visualized, and monitored in the Wazuh Dashboard.
 
-## 📖 Project Overview
-
-This project demonstrates how to integrate **ModSecurity (WAF)** running on an Apache webserver with **Wazuh (SIEM)**. The integration provides **real-time monitoring of web application attacks** (like SQL Injection, XSS) and shows them in the Wazuh Dashboard.
-
-### 🔹 What is Apache?
-
-Apache is one of the most popular open-source web servers. It serves content (HTML, PHP, etc.) to clients over HTTP/HTTPS.
-
-### 🔹 What is a WAF?
-
-A **Web Application Firewall (WAF)** inspects and filters HTTP/S requests to protect applications against common attacks such as SQL injection, XSS, RFI, LFI, and CSRF.
-
-### 🔹 What is ModSecurity (ModSec)?
-
-ModSecurity is a WAF module for Apache, Nginx, and IIS. It can operate in detection-only or blocking mode. With the **OWASP Core Rule Set (CRS)**, ModSecurity can detect/stop many known web application attacks.
-
-### 🔹 What is Wazuh?
-
-Wazuh is an open-source **SIEM** and security platform. It collects logs, monitors agents, applies rules, and visualizes security events. It helps in detection, compliance (PCI-DSS, HIPAA, GDPR, etc.), and incident response.
-
-### 🔹 Why are we doing this project?
-
-* To demonstrate **end-to-end attack detection**: from a malicious request → ModSecurity detection → Wazuh collection → Dashboard alert.
-* To integrate **WAF + SIEM** for better visibility.
-* To learn how to configure logging, log forwarding, and visualization.
-
-### 🔹 Use Cases
-
-* Monitor SQL Injection, XSS, and other web attacks in real-time.
-* Centralize logs from multiple webservers into Wazuh.
-* Provide visual dashboards for security analysts.
-* Help organizations meet compliance requirements by logging and auditing attacks.
+This setup provides visibility into real-time web application attacks (SQL Injection, XSS, etc.) and centralizes WAF logs into a SIEM for enhanced security monitoring.
 
 ---
 
-## 🏗️ Architecture
+## 🔑 Key Components
 
-```
-               [Attacker / Client]
-                        |
-                ┌───────────────────┐
-                │  Kali VM (Agent) │
-                │ ──────────────── │
-                │ Apache + ModSec  │
-                │  (WAF + CRS)     │
-                │  modsec_audit.log│
-                │ Wazuh Agent      │
-                └───────────────────┘
-                        |
-                  Forward logs
-                 (TCP 1514/1515)
-                        |
-                ┌───────────────────┐
-                │ Ubuntu VM (Mgr)  │
-                │ ──────────────── │
-                │ Wazuh Manager     │
-                │ Wazuh Indexer     │
-                │ Wazuh Dashboard   │
-                └───────────────────┘
+### 1. Apache
+
+Apache is one of the most widely used open-source web servers. It handles client HTTP requests and serves web content such as HTML, PHP, and static files.
+
+### 2. WAF (Web Application Firewall)
+
+A WAF inspects incoming HTTP(S) traffic and blocks malicious requests before they reach the application. It protects web applications against common attacks such as SQL injection, Cross-Site Scripting (XSS), and Remote Code Execution (RCE).
+
+### 3. ModSecurity (ModSec)
+
+ModSecurity is an open-source WAF module for Apache. It can run in **DetectionOnly** (logs attacks) or **On** (blocks attacks) mode. It supports rulesets like **OWASP CRS (Core Rule Set)** to detect and prevent web attacks.
+
+### 4. Wazuh
+
+Wazuh is an open-source SIEM and security monitoring platform. It collects logs from agents, correlates security events, and provides dashboards, alerting, and visualization features.
+
+### 5. ModSecurity Audit Logs
+
+ModSecurity generates detailed logs containing information about malicious requests, matched rules, attacker IPs, and targeted URLs. These logs are forwarded to Wazuh for analysis and monitoring.
+
+---
+
+## 🎯 Why this Project?
+
+* Centralize **WAF security events** in a SIEM for better visibility.
+* Detect, analyze, and visualize web attacks.
+* Build dashboards that show:
+
+  * Top attacker IPs
+  * Most attacked URLs
+  * Attack types (SQLi, XSS, etc.)
+  * Alerts per agent/server
+* Improve real-world knowledge of WAF + SIEM integration.
+
+---
+
+## 🏗️ Architecture Diagram
+
+### Mermaid Diagram
+
+```mermaid
+flowchart LR
+  A[Internet / Attacker] --> B[Apache + ModSecurity (Kali / Agent)]
+  B --> C[/var/log/modsec_audit.log - JSON/serial/]
+  C --> D[Wazuh Agent]
+  D --> E[Wazuh Manager / Indexer]
+  E --> F[Wazuh Dashboard]
 ```
 
-* **Kali VM (Agent)** runs the webserver (Apache + ModSecurity). Its Wazuh Agent tails the ModSecurity audit log and forwards it to the Manager.
-* **Ubuntu VM (Manager)** receives logs, applies detection rules, stores them in the indexer, and visualizes them in the Wazuh Dashboard.
+### ASCII Diagram
+
+```
+[Internet] --> [Apache + ModSecurity (Agent host)]
+                      |
+                      v
+         /var/log/modsec_audit.log  (JSON)
+                      |
+                      v
+               [Wazuh Agent]
+                      |
+                      v
+               [Wazuh Manager] <---> [Wazuh Indexer]
+                      |
+                      v
+               [Wazuh Dashboard]
+```
 
 ---
 
-## 📦 Prerequisites
+## ⚙️ Step-by-Step Setup
 
-* **Ubuntu VM** (Wazuh Manager + Dashboard)
-* **Kali VM** (Apache + ModSecurity + Wazuh Agent)
-* Internet access for package installation
-* SSH or console access to both VMs
-* GitHub account (to host this documentation)
+### 1. Wazuh Manager (Ubuntu)
 
----
+1. Download and install Wazuh (Manager, Indexer, Dashboard):
 
-## 📂 Files in this repo
+   ```bash
+   sudo bash ./wazuh-install.sh -a
+   ```
+2. Verify services:
 
-* `README.md` — (this file) full step-by-step documentation
-* `Wazuh-Modsec-Integration.pdf` — printable PDF of the guide
+   ```bash
+   sudo systemctl status wazuh-manager
+   sudo systemctl status wazuh-indexer
+   sudo systemctl status wazuh-dashboard
+   ```
+3. Add an agent using:
 
----
+   ```bash
+   sudo /var/ossec/bin/manage_agents
+   ```
 
-## ⚙️ Wazuh Manager (Ubuntu)
-
-*(Installation steps… unchanged from previous version)*
-
----
-
-## ⚙️ Wazuh Agent (Kali)
-
-*(Installation steps… unchanged from previous version)*
+   Generate a key and use it for the agent.
 
 ---
 
-## ⚙️ Apache + ModSecurity (Kali)
+### 2. Agent (Kali Linux) - Apache + ModSecurity
 
-*(Installation steps… unchanged from previous version)*
+1. Install Apache + ModSecurity:
 
----
+   ```bash
+   sudo apt update
+   sudo apt install -y apache2 libapache2-mod-security2 modsecurity-crs
+   ```
+2. Enable ModSecurity:
 
-## 📤 Forward ModSecurity logs to Wazuh Agent
+   ```bash
+   sudo a2enmod security2
+   sudo cp /etc/modsecurity/modsecurity.conf-recommended /etc/modsecurity/modsecurity.conf
+   ```
 
-*(Steps unchanged… includes localfile config in ossec.conf)*
+   Edit `/etc/modsecurity/modsecurity.conf` and set:
 
----
+   ```
+   SecRuleEngine On
+   ```
+3. Configure Audit Logging (JSON format):
 
-## 🧪 Testing the pipeline
+   ```
+   SecAuditLog /var/log/apache2/modsec_audit.log
+   SecAuditLogFormat JSON
+   SecAuditLogType Serial
+   ```
 
-*(Attack generation, checking logs, verifying alerts… unchanged)*
+   Fix permissions:
 
----
-
-## 📊 Build the WAF Dashboard
-
-*(Steps unchanged… Pie, Bar, Timeline, Raw logs)*
-
----
-
-## 🛠 Troubleshooting & Tips
-
-*(Unchanged)*
-
----
-
-## 🚀 Publish this repo to GitHub
-
-*(Unchanged)*
-
----
-
-## 🤝 Contributing
-
-Contributions welcome — open an issue or PR with improvements.
-
-## 📜 License
-
-MIT License.
-
-## 📬 Contact
-
-Open an issue in this repository for questions.
+   ```bash
+   sudo touch /var/log/apache2/modsec_audit.log
+   sudo chown www-data:www-data /var/log/apache2/modsec_audit.log
+   sudo chmod 640 /var/log/apache2/modsec_audit.log
+   sudo systemctl restart apache2
+   ```
 
 ---
 
-*End of README.*
+### 3. Wazuh Agent (Kali)
+
+1. Install and register agent:
+
+   ```bash
+   sudo apt install -y wazuh-agent
+   sudo /var/ossec/bin/agent-auth -m <MANAGER_IP>
+   ```
+2. Configure agent to monitor ModSecurity logs (`/var/ossec/etc/ossec.conf`):
+
+   ```xml
+   <localfile>
+     <log_format>json</log_format>
+     <location>/var/log/apache2/modsec_audit.log</location>
+   </localfile>
+   ```
+3. Restart agent:
+
+   ```bash
+   sudo systemctl restart wazuh-agent
+   ```
+
+---
+
+### 4. Dashboard & Visualization
+
+* Open Wazuh Dashboard → Discover → Search logs from your agent.
+* Create visualizations:
+
+  * Attacks by rule description
+  * Top attacker IPs
+  * Top targeted URLs
+  * Alerts per agent
+* Save and combine into a dashboard.
+
+---
+
+## 🧪 Testing
+
+1. Trigger XSS:
+
+   ```bash
+   curl "http://localhost/?q=<script>alert(1)</script>"
+   ```
+2. Trigger SQL Injection:
+
+   ```bash
+   curl "http://localhost/index.php?id=1' OR '1'='1"
+   ```
+3. Check logs:
+
+   ```bash
+   tail -f /var/log/apache2/modsec_audit.log
+   tail -f /var/ossec/logs/ossec.log
+   ```
+4. Verify events appear in Wazuh Dashboard.
+
+---
+
+## 🛠️ Troubleshooting
+
+* **No logs in Wazuh:** check `ossec.conf` paths, restart agent.
+* **ModSecurity not blocking:** ensure `SecRuleEngine On` and OWASP CRS rules are enabled.
+* **Permission denied on audit log:** fix file ownership to `www-data:www-data`.
+* **Agent disconnected after IP change:** re-run `agent-auth -m <MANAGER_IP>`.
+
+---
+
+## 📜 Notes
+
+* Use this project in a **lab/test environment only**.
+* Logs may contain sensitive data — secure log files and dashboard access.
+* License: MIT (you can choose your preferred license).
+
+---
+
+## 🙌 Acknowledgements
+
+This project was developed as a practical integration of **Apache + ModSecurity WAF** with **Wazuh SIEM**, based on lab testing and documented results.
