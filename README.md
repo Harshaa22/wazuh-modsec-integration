@@ -50,7 +50,6 @@ ModSecurity generates detailed logs containing information about malicious reque
 
 ### Mermaid Diagram
 
-```mermaid
 flowchart LR
   A[Internet / Attacker] --> B[Apache + ModSecurity (Kali Agent)]
   B --> C["/var/log/modsec_audit.log (JSON serial)"]
@@ -58,7 +57,6 @@ flowchart LR
   D --> E[Wazuh Manager / Indexer]
   E --> F[Wazuh Dashboard]
 
-```
 
 ### ASCII Diagram
 
